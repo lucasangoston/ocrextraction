@@ -24,10 +24,22 @@ def generate_student_answer_prompt(subject_text: str) -> str:
         "   Réponse: [Ta réponse en texte simple]\n\n"
         "3. [Intitulé de la question 3]\n"
         "   Réponse: [Ta réponse en texte simple]\n\n"
-        "...\n\n"
 
         "Voici le sujet à traiter. Rédige ta copie en respectant ce format et sans insérer de LaTeX ou de symboles spéciaux :\n\n"
         f"{subject_text}\n\n"
         "Fin de l'énoncé. Merci de respecter strictement le format demandé."
+    )
+    return prompt
+
+def generate_evaluation_correction_prompt(student_text: str, corrige_text: str) -> str:
+    prompt = (
+        "Vous êtes un professeur de 4ème. Vous recevez la réponse d'un élève à une évaluation de mathématiques ainsi que le corrigé officiel.\n\n"
+        "Voici la réponse de l'élève :\n"
+        f"{student_text}\n\n"
+        "Voici le corrigé officiel :\n"
+        f"{corrige_text}\n\n"
+        "Veuillez corriger la réponse de l'élève en vous basant sur le corrigé officiel. "
+        "Votre correction doit être un texte narratif en paragraphes simples, sans aucune notation LaTeX ni utilisation de symboles tels que $ ou \\square. "
+        "Indiquez clairement les erreurs, les points forts et proposez des conseils d'amélioration pédagogique."
     )
     return prompt
