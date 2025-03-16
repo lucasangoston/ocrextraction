@@ -1,54 +1,56 @@
 import os
+import logging
 from dotenv import load_dotenv
 from mistralai import Mistral
 
-# Load environment variables from .env file
-load_dotenv()
+from prompt_generation import generate_student_answer_prompt
+from mistral_client import upload_pdf, get_signed_url, process_ocr, get_correction_response
+from pdf_export import export_correction_to_pdf
 
-# Get the Mistral API key from the environment
-api_key = os.getenv("MISTRAL_API_KEY")
-
-if not api_key:
-    raise ValueError("Please set the MISTRAL_API_KEY environment variable.")
-
-# Initialize the Mistral client
-client = Mistral(api_key=api_key)
-
-# Path to your test PDF file
-pdf_path = "Document.pdf"
-
-# Check if the file exists
-if not os.path.exists(pdf_path):
-    raise FileNotFoundError(f"The file {pdf_path} does not exist. Please provide a valid PDF file.")
-
-# Step 1: Upload the PDF file
-print("Uploading PDF file...")
-with open(pdf_path, "rb") as pdf_file:
-    uploaded_pdf = client.files.upload(
-        file={
-            "file_name": os.path.basename(pdf_path),
-            "content": pdf_file,
-        },
-        purpose="ocr"
+def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
     )
+    load_dotenv()
+    api_key = os.environ.get("MISTRAL_API_KEY")
+    if not api_key:
+        logging.error("La variable d'environnement MISTRAL_API_KEY n'est pas définie.")
+        raise ValueError("Veuillez définir la variable d'environnement MISTRAL_API_KEY.")
 
-print(f"Uploaded file ID: {uploaded_pdf.id}")
+    model = "mistral-large-latest"
+    client = Mistral(api_key=api_key)
 
-# Step 2: Get a signed URL for the uploaded file
-print("Retrieving signed URL...")
-signed_url = client.files.get_signed_url(file_id=uploaded_pdf.id)
-print(f"Signed URL: {signed_url.url}")
+    pdf_path = "files/4eme.pdf"
+    if not os.path.exists(pdf_path):
+        logging.error(f"Le fichier {pdf_path} n'existe pas. Veuillez fournir un fichier PDF valide.")
+        raise FileNotFoundError(f"Le fichier {pdf_path} n'existe pas.")
 
-# Step 3: Process the file with OCR
-print("Processing OCR...")
-ocr_response = client.ocr.process(
-    model="mistral-ocr-latest",
-    document={
-        "type": "document_url",
-        "document_url": signed_url.url,
-    }
-)
+    try:
+        uploaded_pdf = upload_pdf(client, pdf_path)
+        signed_url_obj = get_signed_url(client, uploaded_pdf.id)
+        ocr_text = process_ocr(client, signed_url_obj.url)
+    except Exception as e:
+        logging.exception("Erreur lors du traitement du PDF")
+        raise e
 
-# Step 4: Print the OCR results
-print("\nOCR Results:")
-print(ocr_response)  # Adjust based on the actual response structure
+    # Génération du prompt pour obtenir la réponse d'un élève
+    student_prompt = generate_student_answer_prompt(ocr_text)
+    logging.info("Prompt généré :")
+    logging.info(student_prompt)
+
+    try:
+        student_response = get_correction_response(client, model, student_prompt)
+    except Exception as e:
+        logging.exception("Erreur lors de l'obtention de la réponse")
+        raise e
+
+    # Export de la réponse en PDF dans le dossier "correction"
+    os.makedirs("correction", exist_ok=True)
+    output_pdf_path = os.path.join("correction", "reponse_eleve.pdf")
+    export_correction_to_pdf(student_response, output_pdf_path)
+
+    logging.info("Processus terminé avec succès.")
+
+if __name__ == "__main__":
+    main()
